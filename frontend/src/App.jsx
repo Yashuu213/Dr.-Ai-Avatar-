@@ -3,7 +3,9 @@ import WebcamFeed from './components/WebcamFeed';
 import ChatHistory from './components/ChatHistory';
 import ChatInput from './components/ChatInput';
 import ReportModal from './components/ReportModal';
-import { FileText, Power } from 'lucide-react';
+import ApiKeyModal from './components/ApiKeyModal';
+import { Power } from 'lucide-react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Simple TTS helper
 const speak = (text, setTalking) => {
@@ -22,6 +24,8 @@ function App() {
   const [input, setInput] = useState('');
   const [talking, setTalking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(true); // default true to avoid flash
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
 
   // Report State
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -31,6 +35,7 @@ function App() {
 
   const recognitionRef = useRef(null);
   const webcamRef = useRef(null);
+  const audioRef = useRef(null);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -57,6 +62,17 @@ function App() {
       recognitionRef.current?.stop();
       setIsListening(false);
     } else {
+      // Voice Interruption: Stop AI if it's currently speaking
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current = null;
+      }
+      setTalking(false);
+      
       recognitionRef.current?.start();
       setIsListening(true);
     }
@@ -120,7 +136,22 @@ function App() {
       const aiMsg = { role: 'assistant', content: data.text || "Error retrieving response." };
 
       setMessages(prev => [...prev, aiMsg]);
-      speak(data.audio_text || data.text, setTalking);
+      
+      if (data.audio_base64) {
+        const audio = new Audio("data:audio/mp3;base64," + data.audio_base64);
+        audioRef.current = audio;
+        audio.onplay = () => setTalking(true);
+        audio.onended = () => {
+          setTalking(false);
+          if (audioRef.current === audio) audioRef.current = null;
+        };
+        audio.play().catch(err => {
+          console.error("Audio playback failed:", err);
+          setTalking(false);
+        });
+      } else {
+        speak(data.audio_text || data.text, setTalking);
+      }
 
     } catch (error) {
       console.error("Backend Error:", error);
@@ -146,6 +177,24 @@ function App() {
   };
 
   useEffect(() => {
+    // Check if backend has keys
+    fetch('http://localhost:5000/api/config-status')
+      .then(res => res.json())
+      .then(data => {
+        setIsConfigured(data.configured);
+        setIsLoadingConfig(false);
+        
+        if (data.configured) {
+          startGreetingTimer();
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch config status", err);
+        setIsLoadingConfig(false);
+      });
+  }, []);
+
+  const startGreetingTimer = () => {
     const timer = setTimeout(() => {
       const initialMessage = "System Online. Medical AI Assistant Ready. Hello. I am here to help. What is your full name?";
       setMessages([{
@@ -156,10 +205,21 @@ function App() {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, []);
+  };
+
+  const handleConfigSaved = () => {
+    setIsConfigured(true);
+    startGreetingTimer();
+  };
+
+  if (isLoadingConfig) {
+    return <div className="w-full h-screen bg-slate-900 flex items-center justify-center text-cyan-500 font-mono">Initializing System...</div>;
+  }
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-slate-900 text-white font-sans selection:bg-cyan-500/30">
+      
+      {!isConfigured && <ApiKeyModal onSave={handleConfigSaved} />}
 
       {/* Background Video Layer */}
       <div className="absolute inset-0 z-0">
@@ -185,16 +245,12 @@ function App() {
         <div className="flex-1 flex flex-row">
 
           {/* Left: Chat History */}
-          <div className="w-1/3 h-full flex items-center justify-start pl-8 pt-12">
+          <div className="w-1/2 h-full flex items-center justify-start pl-8 pt-12">
             <ChatHistory messages={messages} />
           </div>
 
-          {/* Center: Spacer */}
-          <div className="w-1/3 h-full flex items-center justify-center">
-          </div>
-
           {/* Right: User Webcam (Large) */}
-          <div className="w-1/3 h-full flex items-start justify-end pr-8 pt-12">
+          <div className="w-1/2 h-full flex items-start justify-end pr-8 pt-12">
             <div className="w-full aspect-video max-w-lg rounded-2xl overflow-hidden glass shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/20">
               <WebcamFeed feedRef={webcamRef} />
             </div>

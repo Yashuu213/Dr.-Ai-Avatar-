@@ -1,9 +1,23 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, FileText, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import html2pdf from 'html2pdf.js';
 
 const ReportModal = ({ isOpen, onClose, report, isLoading }) => {
+    const reportRef = useRef(null);
+
+    const handleDownloadPDF = () => {
+        if (!reportRef.current) return;
+        const opt = {
+            margin: 1,
+            filename: 'Medical_Report.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        html2pdf().from(reportRef.current).set(opt).save();
+    };
     if (!isOpen) return null;
 
     return (
@@ -34,7 +48,10 @@ const ReportModal = ({ isOpen, onClose, report, isLoading }) => {
                                 <p className="text-blue-600 font-mono animate-pulse">ANALYZING SESSION DATA...</p>
                             </div>
                         ) : (
-                            <div className="prose max-w-none prose-headings:text-blue-800 prose-strong:text-gray-900 prose-li:marker:text-blue-500">
+                            <div 
+                                ref={reportRef} 
+                                className="prose max-w-none prose-headings:text-blue-800 prose-strong:text-gray-900 prose-li:marker:text-blue-500 p-4"
+                            >
                                 <ReactMarkdown>{report}</ReactMarkdown>
                             </div>
                         )}
@@ -45,7 +62,7 @@ const ReportModal = ({ isOpen, onClose, report, isLoading }) => {
                         <button onClick={onClose} className="px-6 py-2 rounded-full border border-gray-300 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium">
                             Close
                         </button>
-                        <button onClick={() => window.print()} className="px-6 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 transition-all flex items-center space-x-2 text-sm font-medium">
+                        <button onClick={handleDownloadPDF} className="px-6 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 transition-all flex items-center space-x-2 text-sm font-medium">
                             <Download size={16} />
                             <span>Export PDF</span>
                         </button>

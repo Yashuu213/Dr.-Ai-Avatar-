@@ -15,7 +15,23 @@ ai_service = AIService()
 
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"status": "AI Avatar Backend is Running! 🚀", "endpoints": ["/api/chat", "/api/report"]})
+    return jsonify({"status": "AI Avatar Backend is Running! 🚀", "endpoints": ["/api/chat", "/api/report", "/api/config-status", "/api/config"]})
+
+@app.route('/api/config-status', methods=['GET'])
+def config_status():
+    return jsonify({"configured": ai_service.is_configured})
+
+@app.route('/api/config', methods=['POST'])
+def set_config():
+    data = request.json
+    gemini_key = data.get('gemini_key')
+    elevenlabs_key = data.get('elevenlabs_key')
+    
+    if not gemini_key:
+        return jsonify({"success": False, "error": "Gemini API Key is required"}), 400
+        
+    success = ai_service.set_keys(gemini_key, elevenlabs_key)
+    return jsonify({"success": success})
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
