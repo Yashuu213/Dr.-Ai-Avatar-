@@ -28,7 +28,7 @@ class AIService:
                 return
             
             # 2. Setup LLM
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=self.api_key, temperature=0.2)
+            llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=self.api_key, temperature=0.2)
             
             # 3. Setup Prompt
             system_prompt = (

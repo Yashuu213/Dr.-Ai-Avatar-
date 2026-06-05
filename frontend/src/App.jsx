@@ -68,7 +68,7 @@ function App() {
     setInput('');
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/chat', {
+      const res = await fetch('http://localhost:5000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input })
@@ -92,7 +92,7 @@ function App() {
     setIsGeneratingReport(true);
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/report');
+      const res = await fetch('http://localhost:5000/api/report');
       const data = await res.json();
       setReportContent(data.report);
     } catch (error) {
