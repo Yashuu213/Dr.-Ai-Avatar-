@@ -1,14 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 
-const WebcamFeed = () => {
-    const videoRef = useRef(null);
+const WebcamFeed = ({ feedRef }) => {
+    const defaultVideoRef = useRef(null);
+    const activeRef = feedRef || defaultVideoRef;
 
     useEffect(() => {
         const startVideo = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
+                if (activeRef.current) {
+                    activeRef.current.srcObject = stream;
                 }
             } catch (err) {
                 console.error("Error accessing webcam:", err);
@@ -16,12 +17,12 @@ const WebcamFeed = () => {
         };
 
         startVideo();
-    }, []);
+    }, [activeRef]);
 
     return (
         <div className="relative w-full h-full rounded-2xl overflow-hidden glass shadow-2xl border border-white/10">
             <video
-                ref={videoRef}
+                ref={activeRef}
                 autoPlay
                 muted
                 className="w-full h-full object-cover"

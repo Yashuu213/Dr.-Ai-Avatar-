@@ -1,8 +1,15 @@
-import React from 'react';
-import { Send, Mic } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Send, Mic, Paperclip, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const ChatInput = ({ input, setInput, onSend, isListening, toggleListening }) => {
+const ChatInput = ({ input, setInput, onSend, isListening, toggleListening, attachedFile, setAttachedFile }) => {
+    const fileInputRef = useRef(null);
+
+    const handleFileChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            setAttachedFile(e.target.files[0]);
+        }
+    };
     return (
         <div className="w-full max-w-2xl mx-auto">
             <motion.form
@@ -20,6 +27,22 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening }) =>
                     <Mic size={20} />
                 </button>
 
+                {/* Attach Button */}
+                <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 rounded-full transition-all duration-300 hover:bg-white/10 text-gray-400 hover:text-white"
+                >
+                    <Paperclip size={20} />
+                </button>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                />
+
                 {/* Text Input */}
                 <input
                     type="text"
@@ -32,12 +55,30 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening }) =>
                 {/* Send Button */}
                 <button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() && !attachedFile}
                     className="bg-cyan-400 hover:bg-cyan-300 text-black font-bold py-2 px-6 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.6)]"
                 >
                     <span className="text-xs tracking-widest">SEND</span>
                 </button>
             </motion.form>
+
+            {/* Attached File Badge */}
+            {attachedFile && (
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute bottom-16 left-4 bg-cyan-900/80 border border-cyan-500/50 text-cyan-100 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs backdrop-blur-md"
+                >
+                    <Paperclip size={14} />
+                    <span className="truncate max-w-[200px]">{attachedFile.name}</span>
+                    <button 
+                        onClick={() => setAttachedFile(null)}
+                        className="ml-2 hover:bg-cyan-800 rounded-full p-0.5 transition-colors"
+                    >
+                        <X size={14} />
+                    </button>
+                </motion.div>
+            )}
         </div>
     );
 };

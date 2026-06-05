@@ -27,8 +27,10 @@ function App() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [reportContent, setReportContent] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null);
 
   const recognitionRef = useRef(null);
+  const webcamRef = useRef(null);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -65,13 +67,53 @@ function App() {
 
     const userMsg = { role: 'user', content: input };
     setMessages(prev => [...prev, userMsg]);
+
+    let imageBase64 = null;
+    if (webcamRef.current && webcamRef.current.readyState >= 2) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = webcamRef.current.videoWidth;
+        canvas.height = webcamRef.current.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(webcamRef.current, 0, 0, canvas.width, canvas.height);
+        imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+      } catch (err) {
+        console.error("Failed to capture webcam frame", err);
+      }
+    }
+
+    let attachedFileData = null;
+    if (attachedFile) {
+      try {
+        const base64Str = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(attachedFile);
+        });
+        attachedFileData = {
+          name: attachedFile.name,
+          type: attachedFile.type,
+          data: base64Str
+        };
+      } catch (err) {
+        console.error("Failed to read attached file", err);
+      }
+    }
+
+    // Clear input and attached file immediately
     setInput('');
+    setAttachedFile(null);
 
     try {
       const res = await fetch('http://localhost:5000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input })
+        body: JSON.stringify({ 
+          message: userMsg.content, 
+          image: imageBase64,
+          attached_file: attachedFileData
+        })
       });
 
       const data = await res.json();
@@ -154,20 +196,23 @@ function App() {
           {/* Right: User Webcam (Large) */}
           <div className="w-1/3 h-full flex items-start justify-end pr-8 pt-12">
             <div className="w-full aspect-video max-w-lg rounded-2xl overflow-hidden glass shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/20">
-              <WebcamFeed />
+              <WebcamFeed feedRef={webcamRef} />
             </div>
           </div>
         </div>
 
         {/* Bottom Section: Input */}
-        <div className="h-24 flex items-center justify-center pb-8 relative">
+        <div className="p-4 bg-black/40 border-t border-white/10 relative z-10">
           <ChatInput
             input={input}
             setInput={setInput}
             onSend={handleSend}
             isListening={isListening}
             toggleListening={toggleListening}
+            attachedFile={attachedFile}
+            setAttachedFile={setAttachedFile}
           />
+        </div>
 
           {/* End Session Button - Bottom Right */}
           <div className="absolute right-8 bottom-8 z-50">
@@ -180,8 +225,6 @@ function App() {
             </button>
           </div>
         </div>
-
-      </div>
 
       {/* Report Modal */}
       <ReportModal

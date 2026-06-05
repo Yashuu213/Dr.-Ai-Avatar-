@@ -28,7 +28,8 @@ class AIService:
                 return
             
             # 2. Setup LLM
-            llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=self.api_key, temperature=0.2)
+            self.llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=self.api_key, temperature=0.2)
+            llm = self.llm
             
             # 3. Setup Prompt
             system_prompt = (
@@ -38,7 +39,9 @@ class AIService:
                 "1. Use the provided context to guide your answers. If the context has specific rules, follow them strictly.\n"
                 "2. For minor/basic issues (like mouth ulcers, mild cold, headache), use your general medical knowledge to provide helpful home-care advice or ask diagnostic questions.\n"
                 "3. ONLY advise them to seek immediate professional medical help if the symptoms are SEVERE (e.g., chest pain, breathing difficulty, severe bleeding, sudden numbness) or if they ask for prescription medication.\n"
-                "4. NEVER invent false medical facts or prescribe actual medicine.\n\n"
+                "4. NEVER invent false medical facts or prescribe actual medicine.\n"
+                "5. VISION CAPABILITY: You can now SEE images from the user's webcam. If they show you an image, actively analyze and describe what you see (e.g., injuries, symptoms, reports) and incorporate it into your advice.\n"
+                "6. UPLOADED REPORTS: If the user provides text from an uploaded medical report, read it carefully, extract the key findings, explain them in simple terms, and use them to inform your diagnosis and conclusions.\n\n"
                 "INTAKE PROCESS (Focus on Diagnostic Quality, Skip the Fluff):\n"
                 "1. Language Matching: You MUST reply in the exact same language the user uses. If the user types in Hinglish (Hindi in English letters) or Hindi, you MUST reply in natural Hinglish or Hindi.\n"
                 "2. Patient Info (MANDATORY FIRST STEP): In your VERY FIRST message, you MUST ask the user for their Name, Age, and Gender. This is strictly required for their medical report.\n"
@@ -48,6 +51,7 @@ class AIService:
                 "CONTEXT FROM KNOWLEDGE BASE:\n{context}\n\n"
                 "Remember: Always include a medical disclaimer if the situation sounds serious."
             )
+            self.system_prompt_str = system_prompt
             
             prompt = ChatPromptTemplate.from_messages([
                 ("system", system_prompt),
@@ -62,17 +66,26 @@ class AIService:
         except Exception as e:
             print(f"Error configuring RAG: {e}")
 
-    def get_response(self, user_message):
+    def get_response(self, user_message, image_base64=None):
         if not self.retrieval_chain:
             return {"text": "System Error: RAG system not initialized. Check your API key or FAISS index.", "audio_text": "System Error"}
             
         try:
-            response = self.retrieval_chain.invoke({
-                "input": user_message,
-                "chat_history": self.history
-            })
-            
-            answer = response["answer"]
+            if image_base64:
+                content = [{"type": "text", "text": user_message}]
+                content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
+                
+                sys_msg = self.system_prompt_str.replace("{context}", "No additional text context available for image analysis.")
+                messages = [("system", sys_msg)] + self.history + [HumanMessage(content=content)]
+                
+                ai_msg = self.llm.invoke(messages)
+                answer = ai_msg.content
+            else:
+                response = self.retrieval_chain.invoke({
+                    "input": user_message,
+                    "chat_history": self.history
+                })
+                answer = response["answer"]
             
             # Update memory
             self.history.append(HumanMessage(content=user_message))
