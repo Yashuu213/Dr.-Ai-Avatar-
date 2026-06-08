@@ -3,8 +3,11 @@ from flask_cors import CORS
 import os
 import base64
 import fitz  # PyMuPDF
+import pydicom
+import io
 from dotenv import load_dotenv
 from services.ai_service import AIService
+from utils.drug_engine import DrugInteractionEngine
 
 load_dotenv()
 
@@ -12,6 +15,7 @@ app = Flask(__name__)
 CORS(app)
 
 ai_service = AIService()
+drug_engine = DrugInteractionEngine()
 
 @app.route('/', methods=['GET'])
 def index():
@@ -69,6 +73,47 @@ def chat():
 def get_report():
     report = ai_service.generate_report()
     return jsonify({"report": report})
+
+@app.route('/api/generate_soap', methods=['GET'])
+def generate_soap():
+    soap_note = ai_service.generate_soap()
+    return jsonify({"soap_note": soap_note})
+
+@app.route('/api/check_interaction', methods=['POST'])
+def check_interaction():
+    data = request.json
+    medicine = data.get('medicine', '')
+    
+    # We can pass the stringified chat history from ai_service
+    history_str = "\n".join([f"{msg.type}: {msg.content}" for msg in ai_service.history])
+    
+    result = drug_engine.check_interaction(history_str, medicine)
+    return jsonify(result)
+
+@app.route('/api/upload_dicom', methods=['POST'])
+def upload_dicom():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    if file:
+        try:
+            dicom_bytes = file.read()
+            dataset = pydicom.dcmread(io.BytesIO(dicom_bytes))
+            
+            # Extract safe metadata
+            metadata = {
+                "PatientName": str(dataset.get('PatientName', 'Unknown')),
+                "PatientID": str(dataset.get('PatientID', 'Unknown')),
+                "Modality": str(dataset.get('Modality', 'Unknown')),
+                "BodyPartExamined": str(dataset.get('BodyPartExamined', 'Unknown')),
+                "StudyDate": str(dataset.get('StudyDate', 'Unknown'))
+            }
+            return jsonify({"success": True, "metadata": metadata})
+        except Exception as e:
+            return jsonify({"error": f"Failed to parse DICOM: {e}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

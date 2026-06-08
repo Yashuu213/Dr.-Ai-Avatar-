@@ -4,6 +4,7 @@ import ChatHistory from './components/ChatHistory';
 import ChatInput from './components/ChatInput';
 import ReportModal from './components/ReportModal';
 import ApiKeyModal from './components/ApiKeyModal';
+import DicomViewer from './components/DicomViewer';
 import { Power } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -26,6 +27,7 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [isConfigured, setIsConfigured] = useState(true); // default true to avoid flash
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [interactionWarning, setInteractionWarning] = useState(null);
 
   // Report State
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -153,6 +155,23 @@ function App() {
         speak(data.audio_text || data.text, setTalking);
       }
 
+      // Phase 2: Check for Drug Interactions
+      try {
+        const intRes = await fetch('http://localhost:5000/api/check_interaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ medicine: data.text })
+        });
+        const intData = await intRes.json();
+        if (intData.has_interaction) {
+          setInteractionWarning(intData.message);
+          // Auto-clear warning after 15 seconds
+          setTimeout(() => setInteractionWarning(null), 15000);
+        }
+      } catch (err) {
+        console.error("Failed to check interaction:", err);
+      }
+
     } catch (error) {
       console.error("Backend Error:", error);
       const errorMsg = { role: 'assistant', content: "Connection Error." };
@@ -171,6 +190,22 @@ function App() {
     } catch (error) {
       console.error("Report Generation Error:", error);
       setReportContent("Error generating report. Please check the backend connection.");
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handleGenerateSOAP = async () => {
+    setIsReportOpen(true);
+    setIsGeneratingReport(true);
+
+    try {
+      const res = await fetch('http://localhost:5000/api/generate_soap');
+      const data = await res.json();
+      setReportContent(data.soap_note);
+    } catch (error) {
+      console.error("SOAP Generation Error:", error);
+      setReportContent("Error generating SOAP note. Please check the backend connection.");
     } finally {
       setIsGeneratingReport(false);
     }
@@ -238,8 +273,17 @@ function App() {
       {/* Main Container */}
       <div className="relative z-10 w-full h-full p-6 flex flex-col justify-between">
 
-        {/* Header Actions (End Session) */}
-
+        {/* Header Actions & Warnings */}
+        {interactionWarning && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-red-950/90 border border-red-500 text-red-200 px-6 py-4 rounded-xl shadow-[0_0_30px_rgba(239,68,68,0.6)] flex items-center gap-4 max-w-2xl animate-pulse">
+            <span className="text-3xl">⚠️</span>
+            <div>
+              <p className="font-bold text-red-400">PHARMACOGENOMICS ALERT</p>
+              <p className="text-sm">{interactionWarning}</p>
+            </div>
+            <button onClick={() => setInteractionWarning(null)} className="ml-auto text-red-400 hover:text-white">✕</button>
+          </div>
+        )}
 
         {/* Top Section */}
         <div className="flex-1 flex flex-row">
@@ -249,10 +293,13 @@ function App() {
             <ChatHistory messages={messages} />
           </div>
 
-          {/* Right: User Webcam (Large) */}
-          <div className="w-1/2 h-full flex items-start justify-end pr-8 pt-12">
-            <div className="w-full aspect-video max-w-lg rounded-2xl overflow-hidden glass shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/20">
+          {/* Right: User Webcam & DICOM */}
+          <div className="w-1/2 h-full flex flex-col items-end justify-start pr-8 pt-12 gap-6">
+            <div className="w-full aspect-video max-w-lg rounded-2xl overflow-hidden glass shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/20 shrink-0">
               <WebcamFeed feedRef={webcamRef} />
+            </div>
+            <div className="w-full max-w-lg h-48 shrink-0">
+              <DicomViewer />
             </div>
           </div>
         </div>
@@ -270,11 +317,17 @@ function App() {
           />
         </div>
 
-          {/* End Session Button - Bottom Right */}
-          <div className="absolute right-8 bottom-8 z-50">
+          {/* Action Buttons - Bottom Right */}
+          <div className="absolute right-8 bottom-8 z-50 flex flex-col gap-3">
+            <button
+              onClick={handleGenerateSOAP}
+              className="flex items-center justify-center space-x-3 bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-100 border border-cyan-500/40 px-6 py-3 rounded-full backdrop-blur-md transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.2)] hover:shadow-[0_0_25px_rgba(6,182,212,0.4)] group"
+            >
+              <span className="font-mono text-xs uppercase tracking-[0.2em] font-semibold">Generate SOAP Note</span>
+            </button>
             <button
               onClick={handleEndSession}
-              className="flex items-center space-x-3 bg-red-950/40 hover:bg-red-900/60 text-red-100 border border-red-500/40 px-6 py-3 rounded-full backdrop-blur-md transition-all duration-300 shadow-[0_0_15px_rgba(239,68,68,0.2)] hover:shadow-[0_0_25px_rgba(239,68,68,0.4)] group"
+              className="flex items-center justify-center space-x-3 bg-red-950/40 hover:bg-red-900/60 text-red-100 border border-red-500/40 px-6 py-3 rounded-full backdrop-blur-md transition-all duration-300 shadow-[0_0_15px_rgba(239,68,68,0.2)] hover:shadow-[0_0_25px_rgba(239,68,68,0.4)] group"
             >
               <Power size={18} className="group-hover:scale-110 transition-transform text-red-400" />
               <span className="font-mono text-xs uppercase tracking-[0.2em] font-semibold">End Session</span>
