@@ -5,18 +5,28 @@ import ChatInput from './components/ChatInput';
 import ReportModal from './components/ReportModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import DicomViewer from './components/DicomViewer';
+import DoctorAvatar3D from './components/DoctorAvatar3D';
+import AIAvatarOrb from './components/AIAvatarOrb';
 import { Power } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Simple TTS helper
-const speak = (text, setTalking) => {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel(); // Stop overlap
+const speak = (text, setTalking, voiceGender = 'female') => {
+  if (!('speechSynthesis' in window)) return;
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
   utterance.onstart = () => setTalking(true);
   utterance.onend = () => setTalking(false);
+  
+  // Try to pick a matching voice
+  const voices = window.speechSynthesis.getVoices();
+  const selectedVoice = voiceGender === 'female' 
+    ? voices.find(v => v.name.includes('Female') || v.name.includes('Zira') || v.name.includes('Samantha') || v.name.includes('Google UK English Female'))
+    : voices.find(v => v.name.includes('Male') || v.name.includes('David') || v.name.includes('Daniel') || v.name.includes('Google UK English Male'));
+    
+  if (selectedVoice) {
+    utterance.voice = selectedVoice;
+  }
+
   window.speechSynthesis.speak(utterance);
 };
 
@@ -27,7 +37,11 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [isConfigured, setIsConfigured] = useState(true); // default true to avoid flash
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [voiceGender, setVoiceGender] = useState('female');
   const [interactionWarning, setInteractionWarning] = useState(null);
+  const [triageAlert, setTriageAlert] = useState(null);
+  const [emotion, setEmotion] = useState('neutral');
 
   // Report State
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -130,7 +144,9 @@ function App() {
         body: JSON.stringify({ 
           message: userMsg.content, 
           image: imageBase64,
-          attached_file: attachedFileData
+          attached_file: attachedFileData,
+          voice_gender: voiceGender,
+          emotion: emotion
         })
       });
 
@@ -138,6 +154,13 @@ function App() {
       const aiMsg = { role: 'assistant', content: data.text || "Error retrieving response." };
 
       setMessages(prev => [...prev, aiMsg]);
+      
+      // Phase 3: Criticality Scoring
+      if (data.criticality_level && data.criticality_level <= 2) {
+        setTriageAlert({ level: data.criticality_level, department: data.department });
+      } else {
+        setTriageAlert(null);
+      }
       
       if (data.audio_base64) {
         const audio = new Audio("data:audio/mp3;base64," + data.audio_base64);
@@ -152,7 +175,7 @@ function App() {
           setTalking(false);
         });
       } else {
-        speak(data.audio_text || data.text, setTalking);
+        speak(data.audio_text || data.text, setTalking, voiceGender);
       }
 
       // Phase 2: Check for Drug Interactions
@@ -236,7 +259,7 @@ function App() {
         role: 'assistant',
         content: initialMessage
       }]);
-      speak(initialMessage, setTalking);
+      speak(initialMessage, setTalking, voiceGender);
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -252,26 +275,41 @@ function App() {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-slate-900 text-white font-sans selection:bg-cyan-500/30">
+    <div className="relative w-full h-screen overflow-hidden text-slate-800 font-sans bg-slate-50">
       
       {!isConfigured && <ApiKeyModal onSave={handleConfigSaved} />}
 
-      {/* Background Video Layer */}
-      <div className="absolute inset-0 z-0">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full h-full object-cover opacity-80"
-        >
-          <source src="/video.mp4" type="video/mp4" />
-        </video>
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-slate-900/50" />
+      {/* Modern Animated Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        {/* Subtle Tech Grid */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#cbd5e1_1px,transparent_1px),linear-gradient(to_bottom,#cbd5e1_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-20"></div>
+        
+        {/* Animated Glowing Orbs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-blue-300/40 blur-[100px] animate-[pulse_8s_ease-in-out_infinite]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-teal-300/30 blur-[120px] animate-[pulse_10s_ease-in-out_infinite_reverse]" />
+        <div className="absolute top-[20%] right-[10%] w-[30vw] h-[30vw] rounded-full bg-purple-300/30 blur-[90px] animate-[pulse_12s_ease-in-out_infinite]" />
       </div>
 
       {/* Main Container */}
       <div className="relative z-10 w-full h-full p-6 flex flex-col justify-between">
+        
+        {/* Top Header with Voice Toggle */}
+        <div className="absolute top-6 right-8 flex items-center gap-4 z-50">
+          <div className="bg-white/40 backdrop-blur-md rounded-full px-1 py-1 flex border border-white/50 shadow-sm text-xs font-semibold">
+            <button 
+              onClick={() => setVoiceGender('female')} 
+              className={`px-4 py-1.5 rounded-full transition-all ${voiceGender === 'female' ? 'bg-white shadow-md text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              👩‍⚕️ Dr. Sarah
+            </button>
+            <button 
+              onClick={() => setVoiceGender('male')} 
+              className={`px-4 py-1.5 rounded-full transition-all ${voiceGender === 'male' ? 'bg-white shadow-md text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              👨‍⚕️ Dr. John
+            </button>
+          </div>
+        </div>
 
         {/* Header Actions & Warnings */}
         {interactionWarning && (
@@ -285,27 +323,53 @@ function App() {
           </div>
         )}
 
-        {/* Top Section */}
-        <div className="flex-1 flex flex-row">
+        {/* Phase 3: Triage Alert Box */}
+        {triageAlert && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 bg-red-50 border-2 border-red-500 text-red-900 px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 max-w-2xl animate-pulse">
+            <span className="text-5xl">🚑</span>
+            <div className="text-center">
+              <p className="font-bold text-2xl mb-2 text-red-700">CRITICAL EMERGENCY DETECTED</p>
+              <p className="text-lg">Your symptoms indicate a Level {triageAlert.level} criticality. Please bypass AI intake immediately.</p>
+              <p className="font-semibold mt-2">Recommended Department: {triageAlert.department}</p>
+            </div>
+            <div className="flex gap-4 mt-4">
+               <button onClick={() => setTriageAlert(null)} className="px-6 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-semibold transition-colors">Continue Intake</button>
+               <button className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-105">Book Emergency Appointment</button>
+            </div>
+          </div>
+        )}
 
-          {/* Left: Chat History */}
-          <div className="w-1/2 h-full flex items-center justify-start pl-8 pt-12">
+        {/* Main 3-Column Telehealth Layout */}
+        <div className="flex-1 flex flex-row px-8 pt-10 pb-4 gap-8 relative z-10 w-full max-w-[1800px] mx-auto min-h-0">
+          
+          {/* Left Column: Live Transcript */}
+          <div className="w-[32%] h-full flex flex-col justify-start min-h-0">
             <ChatHistory messages={messages} />
           </div>
 
-          {/* Right: User Webcam & DICOM */}
-          <div className="w-1/2 h-full flex flex-col items-end justify-start pr-8 pt-12 gap-6">
-            <div className="w-full aspect-video max-w-lg rounded-2xl overflow-hidden glass shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/20 shrink-0">
-              <WebcamFeed feedRef={webcamRef} />
+          {/* Center Column: AI Avatar Orb / 3D Avatar */}
+          <div className="w-[36%] h-full flex items-center justify-center relative">
+            <ErrorBoundary fallback={<AIAvatarOrb isTalking={talking} />}>
+              <React.Suspense fallback={<div className="glass rounded-3xl w-full h-full flex items-center justify-center">Loading 3D Avatar...</div>}>
+                <DoctorAvatar3D isTalking={talking} />
+              </React.Suspense>
+            </ErrorBoundary>
+          </div>
+
+          {/* Right Column: Diagnostics (Webcam & DICOM) */}
+          <div className="w-[32%] h-full flex flex-col justify-start gap-8">
+            <div className="w-full aspect-video rounded-3xl overflow-hidden shrink-0">
+              <WebcamFeed feedRef={webcamRef} onEmotionChange={setEmotion} />
             </div>
-            <div className="w-full max-w-lg h-48 shrink-0">
+            <div className="w-full flex-1 min-h-[250px] shrink-0">
               <DicomViewer />
             </div>
           </div>
+
         </div>
 
         {/* Bottom Section: Input */}
-        <div className="p-4 bg-black/40 border-t border-white/10 relative z-10">
+        <div className="py-6 px-4 bg-white/40 backdrop-blur-2xl border-t border-white/60 relative z-10">
           <ChatInput
             input={input}
             setInput={setInput}
@@ -321,16 +385,16 @@ function App() {
           <div className="absolute right-8 bottom-8 z-50 flex flex-col gap-3">
             <button
               onClick={handleGenerateSOAP}
-              className="flex items-center justify-center space-x-3 bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-100 border border-cyan-500/40 px-6 py-3 rounded-full backdrop-blur-md transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.2)] hover:shadow-[0_0_25px_rgba(6,182,212,0.4)] group"
+              className="flex items-center justify-center space-x-3 glass hover:bg-white/80 text-slate-900 px-6 py-3 rounded-full transition-all duration-300 group"
             >
-              <span className="font-mono text-xs uppercase tracking-[0.2em] font-semibold">Generate SOAP Note</span>
+              <span className="font-semibold text-sm tracking-wide">Generate SOAP Note</span>
             </button>
             <button
               onClick={handleEndSession}
-              className="flex items-center justify-center space-x-3 bg-red-950/40 hover:bg-red-900/60 text-red-100 border border-red-500/40 px-6 py-3 rounded-full backdrop-blur-md transition-all duration-300 shadow-[0_0_15px_rgba(239,68,68,0.2)] hover:shadow-[0_0_25px_rgba(239,68,68,0.4)] group"
+              className="flex items-center justify-center space-x-3 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-full transition-all duration-300 shadow-xl shadow-slate-900/20 group"
             >
-              <Power size={18} className="group-hover:scale-110 transition-transform text-red-400" />
-              <span className="font-mono text-xs uppercase tracking-[0.2em] font-semibold">End Session</span>
+              <Power size={18} className="group-hover:scale-110 transition-transform text-white/80" />
+              <span className="font-semibold text-sm tracking-wide">End Session</span>
             </button>
           </div>
         </div>

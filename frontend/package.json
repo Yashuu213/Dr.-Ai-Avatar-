@@ -12,6 +12,8 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@vladmandic/face-api": "^1.7.15",
+    "face-api.js": "^0.22.2",
     "framer-motion": "^12.24.10",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^0.562.0",

@@ -16,13 +16,13 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening, atta
                 initial={{ y: 50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 onSubmit={(e) => { e.preventDefault(); onSend(); }}
-                className="relative flex items-center bg-black/60 backdrop-blur-2xl border border-white/10 rounded-full px-2 py-2 shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+                className="relative flex items-center glass rounded-full px-2 py-2"
             >
                 {/* Mic Button */}
                 <button
                     type="button"
                     onClick={toggleListening}
-                    className={`p-3 rounded-full transition-all duration-300 ${isListening ? 'bg-red-500 text-white animate-pulse shadow-[0_0_20px_red]' : 'hover:bg-white/10 text-gray-400 hover:text-white'}`}
+                    className={`p-3 rounded-full transition-all duration-300 ${isListening ? 'bg-red-500 text-slate-900 animate-pulse shadow-[0_0_20px_red]' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
                 >
                     <Mic size={20} />
                 </button>
@@ -31,7 +31,7 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening, atta
                 <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-3 rounded-full transition-all duration-300 hover:bg-white/10 text-gray-400 hover:text-white"
+                    className="p-3 rounded-full transition-all duration-300 hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                 >
                     <Paperclip size={20} />
                 </button>
@@ -49,14 +49,14 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening, atta
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="Type here..."
-                    className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-500 px-4 text-base"
+                    className="flex-1 bg-transparent border-none outline-none text-slate-900 placeholder-slate-400 px-4 text-base"
                 />
 
                 {/* Send Button */}
                 <button
                     type="submit"
                     disabled={!input.trim() && !attachedFile}
-                    className="bg-cyan-400 hover:bg-cyan-300 text-black font-bold py-2 px-6 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.6)]"
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-8 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl shadow-slate-900/20"
                 >
                     <span className="text-xs tracking-widest">SEND</span>
                 </button>
@@ -67,7 +67,7 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening, atta
                 <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="absolute bottom-16 left-4 bg-cyan-900/80 border border-cyan-500/50 text-cyan-100 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs backdrop-blur-md"
+                    className="absolute bottom-16 left-4 bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs backdrop-blur-md shadow-lg"
                 >
                     <Paperclip size={14} />
                     <span className="truncate max-w-[200px]">{attachedFile.name}</span>

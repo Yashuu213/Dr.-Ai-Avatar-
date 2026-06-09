@@ -42,40 +42,40 @@ export default function ApiKeyModal({ onSave }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md font-sans">
-      <div className="w-full max-w-md p-8 glass rounded-2xl border border-cyan-500/30 shadow-[0_0_50px_rgba(6,182,212,0.15)] relative overflow-hidden">
+      <div className="w-full max-w-md p-8 glass rounded-2xl border border-teal-200 shadow-soft relative overflow-hidden">
         {/* Glow effect */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-cyan-400 blur-sm"></div>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-teal-400 blur-sm"></div>
         
         <div className="flex items-center space-x-3 mb-6">
-          <div className="p-3 bg-cyan-900/30 rounded-xl border border-cyan-500/20 text-cyan-400">
+          <div className="p-3 bg-teal-50 rounded-xl border border-teal-100 text-teal-700">
             <KeyRound size={24} />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-white tracking-wide">System Setup</h2>
-            <p className="text-sm text-cyan-200/60 font-mono">Provide API credentials to begin</p>
+            <h2 className="text-xl font-semibold text-slate-900 tracking-wide">System Setup</h2>
+            <p className="text-sm text-teal-700/60 font-mono">Provide API credentials to begin</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-mono text-slate-400 mb-1.5 uppercase tracking-wider">Gemini API Key (Required)</label>
+            <label className="block text-xs font-mono text-slate-500 mb-1.5 uppercase tracking-wider">Gemini API Key (Required)</label>
             <input
               type="password"
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
               placeholder="AIzaSy..."
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-teal-300 focus:ring-1 focus:ring-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-slate-400 mb-1.5 uppercase tracking-wider">ElevenLabs API Key (Optional Voice)</label>
+            <label className="block text-xs font-mono text-slate-500 mb-1.5 uppercase tracking-wider">ElevenLabs API Key (Optional Voice)</label>
             <input
               type="password"
               value={elevenLabsKey}
               onChange={(e) => setElevenLabsKey(e.target.value)}
               placeholder="Optional for TTS"
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600"
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-teal-300 focus:ring-1 focus:ring-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600"
             />
           </div>
 
@@ -89,7 +89,7 @@ export default function ApiKeyModal({ onSave }) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-4 bg-cyan-600 hover:bg-cyan-500 text-white py-3 rounded-xl font-semibold tracking-wide transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.5)] flex items-center justify-center space-x-2 disabled:opacity-50"
+            className="w-full mt-4 bg-teal-500 hover:bg-teal-500 text-slate-900 py-3 rounded-xl font-semibold tracking-wide transition-all shadow-sm hover:shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
           >
             {isLoading ? (
               <Loader2 className="animate-spin" size={18} />

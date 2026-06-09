@@ -43,6 +43,8 @@ def chat():
     user_message = data.get('message', '')
     image_base64 = data.get('image', None)
     attached_file = data.get('attached_file', None)
+    voice_gender = data.get('voice_gender', 'female')
+    emotion = data.get('emotion', 'neutral')
     
     if attached_file:
         file_type = attached_file.get('type', '')
@@ -66,7 +68,7 @@ def chat():
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
 
-    response = ai_service.get_response(user_message, image_base64)
+    response = ai_service.get_response(user_message, image_base64, voice_gender, emotion)
     return jsonify(response)
 
 @app.route('/api/report', methods=['GET'])

@@ -5,3 +5,7 @@ python-dotenv
 requests
 PyMuPDF
 pydicom
+chromadb
+langchain-chroma
+langchain
+langchain-google-genai

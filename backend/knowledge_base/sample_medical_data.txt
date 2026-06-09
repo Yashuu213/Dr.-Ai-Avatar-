@@ -1,0 +1,9 @@
+General Medical Guidelines:
+- Paracetamol is primarily used for mild to moderate pain and fever.
+- Typical dosage for adults is 500mg to 1000mg every 4-6 hours. Max 4000mg per day.
+- Amoxicillin is a penicillin antibiotic used to treat bacterial infections.
+- Common side effects of Amoxicillin include nausea, vomiting, and diarrhea.
+- Chest pain radiating to the left arm, jaw, or back is a critical sign of a potential myocardial infarction (heart attack). This requires immediate emergency care (Level 1).
+- Symptoms of common cold include runny nose, sore throat, and mild cough (Level 5).
+- A fractured humerus or severe bone pain requires consultation with the Orthopedics department.
+- Persistent fever with a rash should be evaluated by General Medicine or Dermatology.
