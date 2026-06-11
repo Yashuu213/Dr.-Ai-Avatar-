@@ -165,8 +165,8 @@ class AIService:
             return None
             
         try:
-            # Voice ID for "Rachel" (Female) and "Antony" (Male)
-            voice_id = "21m00Tcm4TlvDq8ikWAM" if voice_gender == 'female' else "ErXrlIpnJPRazceIXcsC"
+            # Voice ID for "Sarah" (Female) and "Adam" (Male) for more humanized/empathetic tone
+            voice_id = "EXAVITQu4vr4xnSDxMaL" if voice_gender == 'female' else "pNInz6obpgDQGcFmaJcg"
             url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
             
             headers = {
@@ -179,8 +179,10 @@ class AIService:
                 "text": text.replace("*", ""),
                 "model_id": "eleven_multilingual_v2",
                 "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75
+                    "stability": 0.45,
+                    "similarity_boost": 0.85,
+                    "style": 0.35,
+                    "use_speaker_boost": True
                 }
             }
             

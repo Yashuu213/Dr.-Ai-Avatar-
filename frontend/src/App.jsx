@@ -62,6 +62,25 @@ function App() {
   const recognitionRef = useRef(null);
   const webcamRef = useRef(null);
   const audioRef = useRef(null);
+  const greetingSentRef = useRef(false);
+
+  const triggerGreeting = (genderToUse) => {
+    if (greetingSentRef.current) return;
+    greetingSentRef.current = true;
+    const initialMessage = "System Online. Medical AI Assistant Ready. Hello. I am here to help. What is your full name?";
+    setMessages([{
+      role: 'assistant',
+      content: initialMessage
+    }]);
+    speak(initialMessage, setTalking, genderToUse);
+  };
+
+  const handleGenderDetect = (detectedGender) => {
+    if (!greetingSentRef.current) {
+      setVoiceGender(detectedGender);
+      triggerGreeting(detectedGender);
+    }
+  };
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -239,16 +258,22 @@ function App() {
       .then(data => {
         setIsConfigured(data.configured);
         setIsLoadingConfig(false);
-        
-        if (data.configured) {
-          startGreetingTimer();
-        }
       })
       .catch(err => {
         console.error("Failed to fetch config status", err);
         setIsLoadingConfig(false);
       });
   }, []);
+
+  useEffect(() => {
+    let fallbackTimer;
+    if (isConfigured && !isLoadingConfig && !greetingSentRef.current) {
+      fallbackTimer = setTimeout(() => {
+        triggerGreeting(voiceGender);
+      }, 3000);
+    }
+    return () => clearTimeout(fallbackTimer);
+  }, [isConfigured, isLoadingConfig]);
 
   const handleDicomAnalyzed = (metadata, dicomImageBase64) => {
     const prompt = `[SYSTEM AUTO-MESSAGE: The patient has uploaded a DICOM Medical Scan. Modality: ${metadata.Modality}, Body Part: ${metadata.BodyPartExamined}. Please act as a radiologist, analyze this image, and explain the findings to the patient in a simple, conversational way.]`;
@@ -261,22 +286,8 @@ function App() {
     handleSend(prompt);
   };
 
-  const startGreetingTimer = () => {
-    const timer = setTimeout(() => {
-      const initialMessage = "System Online. Medical AI Assistant Ready. Hello. I am here to help. What is your full name?";
-      setMessages([{
-        role: 'assistant',
-        content: initialMessage
-      }]);
-      speak(initialMessage, setTalking, voiceGender);
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  };
-
   const handleConfigSaved = () => {
     setIsConfigured(true);
-    startGreetingTimer();
   };
 
   if (isLoadingConfig) {
@@ -358,7 +369,7 @@ function App() {
           {/* Right Column: Diagnostics (Webcam & DICOM & Lab) */}
           <div className="w-[32%] h-full flex flex-col justify-start gap-4 overflow-y-auto custom-scrollbar pr-2 pb-4">
             <div className="w-full aspect-video rounded-3xl overflow-hidden shrink-0 shadow-lg">
-              <WebcamFeed feedRef={webcamRef} onEmotionChange={setEmotion} />
+              <WebcamFeed feedRef={webcamRef} onEmotionChange={setEmotion} onGenderDetect={handleGenderDetect} />
             </div>
             <div className="w-full min-h-[250px] shrink-0">
               <DicomViewer onDicomAnalyzed={handleDicomAnalyzed} />

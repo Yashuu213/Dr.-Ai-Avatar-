@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as faceapi from '@vladmandic/face-api';
 
-const WebcamFeed = ({ feedRef, onEmotionChange }) => {
+const WebcamFeed = ({ feedRef, onEmotionChange, onGenderDetect }) => {
     const defaultVideoRef = useRef(null);
     const activeRef = feedRef || defaultVideoRef;
     const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -14,6 +14,7 @@ const WebcamFeed = ({ feedRef, onEmotionChange }) => {
                 await Promise.all([
                     faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
                     faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+                    faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
             } catch (e) {
@@ -44,7 +45,7 @@ const WebcamFeed = ({ feedRef, onEmotionChange }) => {
                 const detections = await faceapi.detectAllFaces(
                     activeRef.current,
                     new faceapi.TinyFaceDetectorOptions()
-                ).withFaceExpressions();
+                ).withFaceExpressions().withAgeAndGender();
 
                 if (detections && detections.length > 0) {
                     const expressions = detections[0].expressions;
@@ -55,6 +56,11 @@ const WebcamFeed = ({ feedRef, onEmotionChange }) => {
                         if (onEmotionChange) {
                             onEmotionChange(dominantEmotion);
                         }
+                    }
+                    
+                    // Trigger Gender Detect
+                    if (onGenderDetect) {
+                        onGenderDetect(detections[0].gender); // 'male' or 'female'
                     }
                 }
             }
