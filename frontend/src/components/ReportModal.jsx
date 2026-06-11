@@ -62,6 +62,9 @@ const ReportModal = ({ isOpen, onClose, report, isLoading }) => {
                         <button onClick={onClose} className="px-6 py-2 rounded-full border border-gray-300 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium">
                             Close
                         </button>
+                        <button onClick={() => window.location.reload()} className="px-6 py-2 rounded-full border border-blue-300 hover:bg-blue-100 text-blue-700 transition-colors text-sm font-medium">
+                            Start New Session
+                        </button>
                         <button onClick={handleDownloadPDF} className="px-6 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-slate-900 shadow-lg shadow-blue-500/30 transition-all flex items-center space-x-2 text-sm font-medium">
                             <Download size={16} />
                             <span>Export PDF</span>

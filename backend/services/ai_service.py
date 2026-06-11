@@ -7,6 +7,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
+from utils.pii_redactor import PIIRedactor
 
 class AIService:
     def __init__(self):
@@ -15,6 +16,7 @@ class AIService:
         self.retriever = None
         self.history = []
         self.is_configured = False
+        self.pii_redactor = PIIRedactor()
         
         if self.api_key:
             self._configure_model()
@@ -51,26 +53,18 @@ class AIService:
                 "2. DIFFERENTIAL DIAGNOSIS: Internally consider multiple potential causes for the symptoms before focusing on the most likely one.\n"
                 "3. RED FLAG SCREENING: Always assess for critical red flags (e.g., chest pain, sudden numbness, severe bleeding). If present, immediately direct to emergency care without further questioning.\n"
                 "4. ALLERGIES & HISTORY: Before suggesting ANY home remedy or OTC medication, ask if they have allergies or existing medical conditions if not already known.\n"
-                "5. PRESCRIPTIONS & REPORTS: If the user uploads a prescription or medical report (via text or image), analyze it carefully. Explain the diagnosis, the prescribed medications, their purpose, dosages, and common side effects in simple terms. Never alter the prescribed dosage.\n"
-                "6. NO PRESCRIBING: NEVER prescribe prescription-only medications. You may suggest basic Over-The-Counter (OTC) items (e.g., paracetamol) only if safe based on their history.\n"
-                "7. VISION CAPABILITY: You can SEE images from the user's webcam or uploads. Actively analyze and describe what you see (e.g., skin lesions, reports, pill bottles) and incorporate it into your advice.\n\n"
+                "5. PRESCRIPTIONS & REPORTS: If the user uploads a prescription or medical report, analyze it carefully. Explain the diagnosis and medications in simple terms. Never alter prescribed dosages.\n"
+                "6. STRICT NO-PRESCRIBING: You are a DIGITAL AI ASSISTANT. NEVER prescribe antibiotics or prescription-only medications. You may ONLY suggest basic Over-The-Counter (OTC) items (e.g., paracetamol, band-aids). DO NOT append a medical disclaimer to your chat messages; the disclaimer will be included in the final report.\n"
+                "7. VISION CAPABILITY: You can SEE images from the user's webcam or uploads. Actively analyze and describe what you see. If the user shows a WOUND, INJURY, or RASH (e.g., 'look at my hand'), carefully analyze its severity, check for signs of infection (redness, swelling), and provide immediate first-aid advice from your knowledge base.\n\n"
                 "INTAKE PROCESS (Focus on Diagnostic Quality, Skip the Fluff):\n"
                 "1. Language Matching: You MUST reply in the exact same language the user uses. If the user types in Hinglish or Hindi, you MUST reply in natural Hinglish or Hindi.\n"
                 "2. Patient Info (MANDATORY FIRST STEP): In your VERY FIRST message, you MUST ask the user for their Name, Age, and Gender. This is strictly required for their medical report.\n"
                 "3. Greeting & Primary Symptom: Along with asking for their details, ask what brings them in today.\n"
                 "4. Focused Diagnostic Questions (ONE AT A TIME): Ask up to 4 CRITICAL diagnostic questions, but you MUST ask them ONE BY ONE. Wait for the user's answer before asking the next question.\n"
-                "5. Analysis/Advice: Once you have gathered enough diagnostic info, immediately offer a preliminary summary and advice based ON CONTEXT.\n"
-                "6. CHAT VS REPORT: In this chat, your responses MUST be EXTREMELY short (1-2 sentences maximum). DO NOT write long paragraphs. Tell the patient that detailed explanations, home care, and medicine side effects will be provided in their final Medical Report.\n"
-                "7. SHORT QUESTIONS: When asking diagnostic questions, ask them directly and briefly. Do not over-explain why you are asking.\n"
-                "8. BRIEF CONCLUSIONS: Your conclusion or advice in chat MUST be just ONE short sentence. Do NOT list out detailed advice in the chat—save all the detailed analysis for the Report.\n\n"
-                "CRITICAL INSTRUCTION - JSON OUTPUT FORMAT:\n"
-                "You MUST return your response as a valid JSON object ONLY. No markdown formatting, no backticks.\n"
-                "Use the following structure:\n"
-                "{{\n"
-                '  "response": "Your spoken conversational response here",\n'
-                '  "criticality_level": <integer 1-5, where 1 is Heart Attack/Emergency and 5 is Common Cold>,\n'
-                '  "recommended_department": "Hospital department (e.g., Cardiology, General Medicine) or None"\n'
-                "}}\n\n"
+                "5. Analysis/Advice: Once you have gathered enough diagnostic info, provide a proper, detailed conclusion. Explain what the disease/problem likely is, why it might have happened, what home care to follow, and what basic OTC medicines they can take to get better.\n"
+                "6. CHAT STYLE: Be conversational, empathetic, and detailed. Do NOT give extremely short answers. The patient wants a proper explanation of their problem and treatment directly in the chat.\n"
+                "7. SHORT QUESTIONS: When asking diagnostic questions, ask them directly. But when giving your final conclusion, explain thoroughly.\n"
+                "8. STRICT NO MARKDOWN: NEVER output markdown code blocks (like ```json). Return your spoken conversational response directly as plain text. Do not use JSON or any structured formatting.\n\n"
                 "CONTEXT FROM KNOWLEDGE BASE:\n{context}\n"
             )
             self.system_prompt_str = system_prompt
@@ -83,47 +77,66 @@ class AIService:
             print(f"Error configuring RAG: {e}")
             self.is_configured = False
 
-    def get_response(self, user_message, image_base64=None, voice_gender='female', emotion='neutral'):
+    def get_response(self, user_message, image_base64=None, voice_gender='female', emotion='neutral', language='English'):
         if not self.is_configured or not self.retriever:
             return {"text": "System Error: Please configure your API Key first.", "audio_text": "System Error"}
             
+        # Emergency Guardrail Check
+        emergency_keywords = ["chest pain", "heart attack", "suicide", "can't breathe", "stroke", "severe bleeding"]
+        user_message_lower = user_message.lower()
+        if any(keyword in user_message_lower for keyword in emergency_keywords):
+            warning_text = "This sounds like a medical emergency. Please call your local emergency services or go to the nearest emergency room immediately."
+            # Append to history so report captures it
+            self.history.append(HumanMessage(content=user_message))
+            self.history.append(AIMessage(content=warning_text))
+            
+            # Generate Audio for emergency warning
+            audio_base64 = self._generate_audio_base64(warning_text, voice_gender)
+            response_data = {
+                "text": f"🚨 **EMERGENCY WARNING:** {warning_text}",
+                "audio_text": warning_text,
+                "criticality_level": 1,
+                "department": "Emergency Room"
+            }
+            if audio_base64:
+                response_data["audio_base64"] = audio_base64
+            return response_data
+
+        # PII Redaction
+        safe_user_message = self.pii_redactor.redact(user_message)
+            
         try:
+            # Always retrieve context from RAG, regardless of whether there's an image
+            docs = self.retriever.invoke(safe_user_message)
+            context = "\n\n".join([d.page_content for d in docs])
+            
             if image_base64:
-                content = [{"type": "text", "text": user_message}]
+                content = [{"type": "text", "text": safe_user_message}]
                 content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
                 
-                sys_msg = self.system_prompt_str.replace("{context}", "No additional text context available for image analysis.")
+                sys_msg = self.system_prompt_str.replace("{context}", context)
                 sys_msg = sys_msg + f"\n\nCURRENT PATIENT EMOTION DETECTED VIA WEBCAM: {emotion.upper()}. Adjust your tone and empathy based on this."
+                sys_msg = sys_msg + f"\n\nCRITICAL INSTRUCTION: Analyze the language and dialect of the user's message. You MUST respond to the patient STRICTLY in the exact same language and dialect they used (e.g. if they speak Gujarati, reply in Gujarati). Ignore the UI selected language ({language.upper()}) if their text is in another language."
                 messages = [("system", sys_msg)] + self.history + [HumanMessage(content=content)]
                 
                 ai_msg = self.llm.invoke(messages)
                 answer = ai_msg.content
             else:
-                docs = self.retriever.invoke(user_message)
+                docs = self.retriever.invoke(safe_user_message)
                 context = "\n\n".join([d.page_content for d in docs])
                 sys_msg = self.system_prompt_str.replace("{context}", context)
                 sys_msg = sys_msg + f"\n\nCURRENT PATIENT EMOTION DETECTED VIA WEBCAM: {emotion.upper()}. Adjust your tone and empathy based on this."
+                sys_msg = sys_msg + f"\n\nCRITICAL INSTRUCTION: Analyze the language and dialect of the user's message. You MUST respond to the patient STRICTLY in the exact same language and dialect they used (e.g. if they speak Gujarati, reply in Gujarati). Ignore the UI selected language ({language.upper()}) if their text is in another language."
                 messages = [("system", sys_msg)] + self.history + [HumanMessage(content=user_message)]
                 ai_msg = self.llm.invoke(messages)
                 answer = ai_msg.content
             
-            # Parse JSON from AI
-            answer_text = answer
+            # Use the raw text answer and clean up any accidental markdown
+            answer_text = answer.replace("```json", "").replace("```", "").strip()
             criticality = 5
             department = "General Medicine"
             
-            try:
-                # Strip markdown code blocks if present
-                clean_json = answer.replace("```json", "").replace("```", "").strip()
-                ai_data = json.loads(clean_json)
-                answer_text = ai_data.get("response", answer)
-                criticality = ai_data.get("criticality_level", 5)
-                department = ai_data.get("recommended_department", "None")
-            except json.JSONDecodeError:
-                print(f"Failed to parse JSON from AI: {answer}")
-                answer_text = answer
-            
-            # Update memory
+            # Update memory - use original user_message so patient sees their own exact text
             self.history.append(HumanMessage(content=user_message))
             self.history.append(AIMessage(content=answer_text))
             
@@ -164,7 +177,7 @@ class AIService:
             
             data = {
                 "text": text.replace("*", ""),
-                "model_id": "eleven_monolingual_v1",
+                "model_id": "eleven_multilingual_v2",
                 "voice_settings": {
                     "stability": 0.5,
                     "similarity_boost": 0.75
@@ -209,7 +222,8 @@ class AIService:
                 "## 📋 Recommended Action Plan\n"
                 "[Point-wise recommendations and home-care advice]\n\n"
                 "---\n"
-                "*Disclaimer: This report was generated by an AI (Dr. Aegis). It does not constitute professional medical advice, diagnosis, or treatment. Please consult a qualified healthcare provider for medical emergencies.*"
+                "⚠️ **LEGAL & MEDICAL DISCLAIMER** ⚠️\n"
+                "*This report and all advice provided by Dr. Aegis (AI Avatar) is strictly for informational and digital triage purposes. Dr. Aegis is an AI Assistant, not a licensed medical practitioner. This does NOT constitute professional medical diagnosis, treatment, or a legal prescription. Always consult a certified physical doctor or visit a hospital for medical treatment. In case of emergency, please contact your local emergency services immediately.*"
             )
             
             sys_msg = "You are a medical assistant tasked with summarizing history."
@@ -249,3 +263,35 @@ class AIService:
             return ai_msg.content
         except Exception as e:
             return f"Failed to generate SOAP note: {e}"
+
+    def analyze_lab_report(self, image_base64):
+        if not self.is_configured:
+             return {"error": "API Key not configured."}
+             
+        try:
+            prompt = (
+                "You are an expert medical lab technician. Extract all test results from this lab report image.\n"
+                "Return the data STRICTLY in this JSON format ONLY:\n"
+                "[\n"
+                "  {\"test_name\": \"Hemoglobin\", \"result\": \"11.2\", \"normal_range\": \"13-17\", \"status\": \"Low\"}\n"
+                "]\n"
+                "Ensure the 'status' is one of: 'Low', 'High', or 'Normal'. If it's outside the normal range, mark it High or Low appropriately. Do not wrap in markdown blocks, just return the JSON string."
+            )
+            content = [{"type": "text", "text": prompt}]
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
+            
+            messages = [HumanMessage(content=content)]
+            ai_msg = self.llm.invoke(messages)
+            
+            # Clean JSON response
+            json_str = ai_msg.content.strip()
+            if json_str.startswith("```json"):
+                json_str = json_str[7:]
+            if json_str.startswith("```"):
+                json_str = json_str[3:]
+            if json_str.endswith("```"):
+                json_str = json_str[:-3]
+                
+            return {"success": True, "data": json.loads(json_str.strip())}
+        except Exception as e:
+            return {"error": str(e)}

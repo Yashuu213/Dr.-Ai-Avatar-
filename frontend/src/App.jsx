@@ -5,9 +5,12 @@ import ChatInput from './components/ChatInput';
 import ReportModal from './components/ReportModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import DicomViewer from './components/DicomViewer';
+import LabReportAnalyzer from './components/LabReportAnalyzer';
+import PrescriptionTemplate from './components/PrescriptionTemplate';
+import html2pdf from 'html2pdf.js';
 import DoctorAvatar3D from './components/DoctorAvatar3D';
 import AIAvatarOrb from './components/AIAvatarOrb';
-import { Power } from 'lucide-react';
+import { Power, Download } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Simple TTS helper
@@ -40,8 +43,14 @@ function App() {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [voiceGender, setVoiceGender] = useState('female');
   const [interactionWarning, setInteractionWarning] = useState(null);
-  const [triageAlert, setTriageAlert] = useState(null);
   const [emotion, setEmotion] = useState('neutral');
+  const [languageCode, setLanguageCode] = useState('en-US');
+
+  const languageMap = {
+    'en-US': 'English',
+    'hi-IN': 'Hindi',
+    'mr-IN': 'Marathi'
+  };
 
   // Report State
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -49,6 +58,7 @@ function App() {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
 
+  const pdfRef = useRef(null);
   const recognitionRef = useRef(null);
   const webcamRef = useRef(null);
   const audioRef = useRef(null);
@@ -65,6 +75,8 @@ function App() {
         const transcript = event.results[0][0].transcript;
         setInput(transcript);
         setIsListening(false);
+        // Auto-send after a tiny delay so the UI updates first
+        setTimeout(() => handleSend(transcript), 100);
       };
 
       recognition.onerror = () => setIsListening(false);
@@ -89,19 +101,23 @@ function App() {
       }
       setTalking(false);
       
-      recognitionRef.current?.start();
+      if (recognitionRef.current) {
+        recognitionRef.current.lang = languageCode;
+        recognitionRef.current.start();
+      }
       setIsListening(true);
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const handleSend = async (overrideInput = null, overrideImageBase64 = null) => {
+    const messageToSend = typeof overrideInput === 'string' ? overrideInput : input;
+    if (!messageToSend.trim()) return;
 
-    const userMsg = { role: 'user', content: input };
+    const userMsg = { role: 'user', content: messageToSend };
     setMessages(prev => [...prev, userMsg]);
 
-    let imageBase64 = null;
-    if (webcamRef.current && webcamRef.current.readyState >= 2) {
+    let imageBase64 = overrideImageBase64;
+    if (!imageBase64 && webcamRef.current && webcamRef.current.readyState >= 2) {
       try {
         const canvas = document.createElement('canvas');
         canvas.width = webcamRef.current.videoWidth;
@@ -146,7 +162,8 @@ function App() {
           image: imageBase64,
           attached_file: attachedFileData,
           voice_gender: voiceGender,
-          emotion: emotion
+          emotion: emotion,
+          language: languageMap[languageCode] || 'English'
         })
       });
 
@@ -154,13 +171,6 @@ function App() {
       const aiMsg = { role: 'assistant', content: data.text || "Error retrieving response." };
 
       setMessages(prev => [...prev, aiMsg]);
-      
-      // Phase 3: Criticality Scoring
-      if (data.criticality_level && data.criticality_level <= 2) {
-        setTriageAlert({ level: data.criticality_level, department: data.department });
-      } else {
-        setTriageAlert(null);
-      }
       
       if (data.audio_base64) {
         const audio = new Audio("data:audio/mp3;base64," + data.audio_base64);
@@ -202,36 +212,24 @@ function App() {
     }
   };
 
-  const handleEndSession = async () => {
+  // --- End Session & Report ---
+  const handleShowReport = async () => {
     setIsReportOpen(true);
     setIsGeneratingReport(true);
-
     try {
-      const res = await fetch('http://localhost:5000/api/report');
+      const res = await fetch('http://localhost:5000/api/soap');
       const data = await res.json();
-      setReportContent(data.report);
-    } catch (error) {
-      console.error("Report Generation Error:", error);
-      setReportContent("Error generating report. Please check the backend connection.");
+      setReportContent(data.soap || "No data available");
+    } catch (err) {
+      console.error("Failed to generate report", err);
+      setReportContent("Failed to generate report. Please try again.");
     } finally {
       setIsGeneratingReport(false);
     }
   };
 
-  const handleGenerateSOAP = async () => {
-    setIsReportOpen(true);
-    setIsGeneratingReport(true);
-
-    try {
-      const res = await fetch('http://localhost:5000/api/generate_soap');
-      const data = await res.json();
-      setReportContent(data.soap_note);
-    } catch (error) {
-      console.error("SOAP Generation Error:", error);
-      setReportContent("Error generating SOAP note. Please check the backend connection.");
-    } finally {
-      setIsGeneratingReport(false);
-    }
+  const handleEndSession = () => {
+    handleShowReport();
   };
 
   useEffect(() => {
@@ -251,6 +249,17 @@ function App() {
         setIsLoadingConfig(false);
       });
   }, []);
+
+  const handleDicomAnalyzed = (metadata, dicomImageBase64) => {
+    const prompt = `[SYSTEM AUTO-MESSAGE: The patient has uploaded a DICOM Medical Scan. Modality: ${metadata.Modality}, Body Part: ${metadata.BodyPartExamined}. Please act as a radiologist, analyze this image, and explain the findings to the patient in a simple, conversational way.]`;
+    handleSend(prompt, dicomImageBase64);
+  };
+
+  const handleLabReportAnalyzed = (labData) => {
+    const abnormalTests = labData.filter(test => test.status.toLowerCase() !== 'normal');
+    const prompt = `[SYSTEM AUTO-MESSAGE: The patient has uploaded a Lab Report. Here is the structured JSON data of the test results: ${JSON.stringify(labData)}. Please act as a physician, explain the overall report, and specifically address the following abnormal values: ${JSON.stringify(abnormalTests)}.]`;
+    handleSend(prompt);
+  };
 
   const startGreetingTimer = () => {
     const timer = setTimeout(() => {
@@ -293,8 +302,18 @@ function App() {
       {/* Main Container */}
       <div className="relative z-10 w-full h-full p-6 flex flex-col justify-between">
         
-        {/* Top Header with Voice Toggle */}
+        {/* Top Header with Voice & Language Toggle */}
         <div className="absolute top-6 right-8 flex items-center gap-4 z-50">
+          <select
+            value={languageCode}
+            onChange={(e) => setLanguageCode(e.target.value)}
+            className="bg-white/40 backdrop-blur-md rounded-full px-4 py-2 border border-white/50 shadow-sm text-xs font-semibold text-slate-700 outline-none hover:bg-white/60 transition-colors cursor-pointer appearance-none"
+            style={{ WebkitAppearance: 'none' }}
+          >
+            <option value="en-US">🌍 English</option>
+            <option value="hi-IN">🇮🇳 Hindi</option>
+            <option value="mr-IN">🚩 Marathi</option>
+          </select>
           <div className="bg-white/40 backdrop-blur-md rounded-full px-1 py-1 flex border border-white/50 shadow-sm text-xs font-semibold">
             <button 
               onClick={() => setVoiceGender('female')} 
@@ -323,22 +342,6 @@ function App() {
           </div>
         )}
 
-        {/* Phase 3: Triage Alert Box */}
-        {triageAlert && (
-          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 bg-red-50 border-2 border-red-500 text-red-900 px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 max-w-2xl animate-pulse">
-            <span className="text-5xl">🚑</span>
-            <div className="text-center">
-              <p className="font-bold text-2xl mb-2 text-red-700">CRITICAL EMERGENCY DETECTED</p>
-              <p className="text-lg">Your symptoms indicate a Level {triageAlert.level} criticality. Please bypass AI intake immediately.</p>
-              <p className="font-semibold mt-2">Recommended Department: {triageAlert.department}</p>
-            </div>
-            <div className="flex gap-4 mt-4">
-               <button onClick={() => setTriageAlert(null)} className="px-6 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-semibold transition-colors">Continue Intake</button>
-               <button className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-105">Book Emergency Appointment</button>
-            </div>
-          </div>
-        )}
-
         {/* Main 3-Column Telehealth Layout */}
         <div className="flex-1 flex flex-row px-8 pt-10 pb-4 gap-8 relative z-10 w-full max-w-[1800px] mx-auto min-h-0">
           
@@ -349,20 +352,19 @@ function App() {
 
           {/* Center Column: AI Avatar Orb / 3D Avatar */}
           <div className="w-[36%] h-full flex items-center justify-center relative">
-            <ErrorBoundary fallback={<AIAvatarOrb isTalking={talking} />}>
-              <React.Suspense fallback={<div className="glass rounded-3xl w-full h-full flex items-center justify-center">Loading 3D Avatar...</div>}>
-                <DoctorAvatar3D isTalking={talking} />
-              </React.Suspense>
-            </ErrorBoundary>
+            <AIAvatarOrb isTalking={talking} />
           </div>
 
-          {/* Right Column: Diagnostics (Webcam & DICOM) */}
-          <div className="w-[32%] h-full flex flex-col justify-start gap-8">
-            <div className="w-full aspect-video rounded-3xl overflow-hidden shrink-0">
+          {/* Right Column: Diagnostics (Webcam & DICOM & Lab) */}
+          <div className="w-[32%] h-full flex flex-col justify-start gap-4 overflow-y-auto custom-scrollbar pr-2 pb-4">
+            <div className="w-full aspect-video rounded-3xl overflow-hidden shrink-0 shadow-lg">
               <WebcamFeed feedRef={webcamRef} onEmotionChange={setEmotion} />
             </div>
-            <div className="w-full flex-1 min-h-[250px] shrink-0">
-              <DicomViewer />
+            <div className="w-full min-h-[250px] shrink-0">
+              <DicomViewer onDicomAnalyzed={handleDicomAnalyzed} />
+            </div>
+            <div className="w-full min-h-[300px] shrink-0">
+              <LabReportAnalyzer onReportAnalyzed={handleLabReportAnalyzed} />
             </div>
           </div>
 
@@ -381,22 +383,28 @@ function App() {
           />
         </div>
 
-          {/* Action Buttons - Bottom Right */}
-          <div className="absolute right-8 bottom-8 z-50 flex flex-col gap-3">
-            <button
-              onClick={handleGenerateSOAP}
-              className="flex items-center justify-center space-x-3 glass hover:bg-white/80 text-slate-900 px-6 py-3 rounded-full transition-all duration-300 group"
-            >
-              <span className="font-semibold text-sm tracking-wide">Generate SOAP Note</span>
-            </button>
-            <button
-              onClick={handleEndSession}
-              className="flex items-center justify-center space-x-3 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-full transition-all duration-300 shadow-xl shadow-slate-900/20 group"
-            >
-              <Power size={18} className="group-hover:scale-110 transition-transform text-white/80" />
-              <span className="font-semibold text-sm tracking-wide">End Session</span>
-            </button>
-          </div>
+          {/* PDF Template (Hidden) */}
+        <PrescriptionTemplate ref={pdfRef} content={reportContent} />
+
+        {/* Action Buttons - Bottom Right */}
+        <div className="absolute right-8 bottom-8 z-50 flex flex-col gap-3">
+          <button
+            onClick={handleShowReport}
+            className="flex items-center justify-center space-x-3 glass hover:bg-white/80 text-slate-900 px-6 py-3 rounded-full transition-all duration-300 group"
+          >
+            <Download size={18} className="group-hover:scale-110 transition-transform text-slate-700" />
+            <span className="font-semibold text-sm tracking-wide">
+              {isGeneratingReport ? 'Generating PDF...' : 'Download Prescription'}
+            </span>
+          </button>
+          <button
+            onClick={handleEndSession}
+            className="flex items-center justify-center space-x-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-full transition-all duration-300 shadow-xl shadow-red-600/20 group"
+          >
+            <Power size={18} className="group-hover:scale-110 transition-transform text-white/80" />
+            <span className="font-semibold text-sm tracking-wide">End Session & Save</span>
+          </button>
+        </div>
         </div>
 
       {/* Report Modal */}

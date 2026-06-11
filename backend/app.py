@@ -5,9 +5,12 @@ import base64
 import fitz  # PyMuPDF
 import pydicom
 import io
+import numpy as np
+from PIL import Image
 from dotenv import load_dotenv
 from services.ai_service import AIService
 from utils.drug_engine import DrugInteractionEngine
+from utils.pii_redactor import PIIRedactor
 
 load_dotenv()
 
@@ -16,6 +19,7 @@ CORS(app)
 
 ai_service = AIService()
 drug_engine = DrugInteractionEngine()
+pii_redactor = PIIRedactor()
 
 @app.route('/', methods=['GET'])
 def index():
@@ -45,6 +49,7 @@ def chat():
     attached_file = data.get('attached_file', None)
     voice_gender = data.get('voice_gender', 'female')
     emotion = data.get('emotion', 'neutral')
+    language = data.get('language', 'English')
     
     if attached_file:
         file_type = attached_file.get('type', '')
@@ -68,7 +73,7 @@ def chat():
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
 
-    response = ai_service.get_response(user_message, image_base64, voice_gender, emotion)
+    response = ai_service.get_response(user_message, image_base64, voice_gender, emotion, language)
     return jsonify(response)
 
 @app.route('/api/report', methods=['GET'])
@@ -107,15 +112,42 @@ def upload_dicom():
             
             # Extract safe metadata
             metadata = {
-                "PatientName": str(dataset.get('PatientName', 'Unknown')),
-                "PatientID": str(dataset.get('PatientID', 'Unknown')),
+                "PatientName": pii_redactor.redact_name(str(dataset.get('PatientName', 'Unknown'))),
+                "PatientID": pii_redactor.redact_id(str(dataset.get('PatientID', 'Unknown'))),
                 "Modality": str(dataset.get('Modality', 'Unknown')),
                 "BodyPartExamined": str(dataset.get('BodyPartExamined', 'Unknown')),
                 "StudyDate": str(dataset.get('StudyDate', 'Unknown'))
             }
-            return jsonify({"success": True, "metadata": metadata})
+
+            image_base64 = None
+            if hasattr(dataset, 'pixel_array'):
+                pixels = dataset.pixel_array
+                if pixels.ndim > 2 and pixels.shape[-1] not in [3, 4]:
+                     pixels = pixels[0] # take first frame if 3D
+                pixels = pixels - np.min(pixels)
+                if np.max(pixels) != 0:
+                    pixels = pixels / np.max(pixels)
+                pixels = (pixels * 255).astype(np.uint8)
+                img = Image.fromarray(pixels)
+                buffered = io.BytesIO()
+                img.save(buffered, format="JPEG")
+                image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+            return jsonify({"success": True, "metadata": metadata, "image_base64": image_base64})
         except Exception as e:
             return jsonify({"error": f"Failed to parse DICOM: {e}"}), 500
+
+@app.route('/api/analyze_lab', methods=['POST'])
+def analyze_lab():
+    data = request.json
+    if not data or 'image' not in data:
+        return jsonify({"error": "No image provided"}), 400
+        
+    result = ai_service.analyze_lab_report(data['image'])
+    if 'error' in result:
+        return jsonify(result), 500
+        
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
