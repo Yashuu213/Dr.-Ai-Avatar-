@@ -16,16 +16,25 @@ const ChatInput = ({ input, setInput, onSend, isListening, toggleListening, atta
                 initial={{ y: 50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 onSubmit={(e) => { e.preventDefault(); onSend(); }}
-                className="relative flex items-center glass rounded-full px-2 py-2"
+                className="relative flex items-center glass rounded-full p-2 gap-2 w-full"
             >
-                {/* Mic Button */}
-                <button
+                {/* Prominent Voice Mode Mic Button (Integrated) */}
+                <motion.button
                     type="button"
                     onClick={toggleListening}
-                    className={`p-3 rounded-full transition-all duration-300 ${isListening ? 'bg-red-500 text-slate-900 animate-pulse shadow-[0_0_20px_red]' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={`relative p-3.5 rounded-full transition-all duration-500 shadow-md shrink-0 flex items-center justify-center z-10 ${
+                        isListening 
+                            ? 'bg-red-500 text-white shadow-[0_0_25px_rgba(239,68,68,0.8)] animate-pulse' 
+                            : 'bg-gradient-to-tr from-blue-600 to-teal-500 text-white hover:shadow-blue-500/50'
+                    }`}
                 >
-                    <Mic size={20} />
-                </button>
+                    {isListening && (
+                        <span className="absolute inset-0 rounded-full border-2 border-red-500 animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite] opacity-75"></span>
+                    )}
+                    <Mic size={22} />
+                </motion.button>
 
                 {/* Attach Button */}
                 <button

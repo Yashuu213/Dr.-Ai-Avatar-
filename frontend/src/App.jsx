@@ -38,6 +38,8 @@ function App() {
   const [input, setInput] = useState('');
   const [talking, setTalking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [isConfigured, setIsConfigured] = useState(true); // default true to avoid flash
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
@@ -105,10 +107,12 @@ function App() {
   }, []);
 
   const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
+    if (isVoiceMode) {
+      setIsVoiceMode(false);
       setIsListening(false);
+      recognitionRef.current?.stop();
     } else {
+      setIsVoiceMode(true);
       // Voice Interruption: Stop AI if it's currently speaking
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -120,11 +124,13 @@ function App() {
       }
       setTalking(false);
       
-      if (recognitionRef.current) {
+      if (recognitionRef.current && !isListening) {
         recognitionRef.current.lang = languageCode;
-        recognitionRef.current.start();
+        try {
+          recognitionRef.current.start();
+          setIsListening(true);
+        } catch(e) {}
       }
-      setIsListening(true);
     }
   };
 
@@ -171,6 +177,7 @@ function App() {
     // Clear input and attached file immediately
     setInput('');
     setAttachedFile(null);
+    setIsThinking(true);
 
     try {
       const res = await fetch('http://localhost:5000/api/chat', {
@@ -228,6 +235,8 @@ function App() {
       console.error("Backend Error:", error);
       const errorMsg = { role: 'assistant', content: "Connection Error." };
       setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsThinking(false);
     }
   };
 
@@ -236,12 +245,16 @@ function App() {
     setIsReportOpen(true);
     setIsGeneratingReport(true);
     try {
-      const res = await fetch('http://localhost:5000/api/soap');
+      const res = await fetch('http://localhost:5000/api/generate_soap');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
       const data = await res.json();
-      setReportContent(data.soap || "No data available");
+      setReportContent(data.soap_note || "No data available");
     } catch (err) {
       console.error("Failed to generate report", err);
-      setReportContent("Failed to generate report. Please try again.");
+      setReportContent(`Failed to generate report. Error details: ${err.message || err}`);
     } finally {
       setIsGeneratingReport(false);
     }
@@ -274,6 +287,22 @@ function App() {
     }
     return () => clearTimeout(fallbackTimer);
   }, [isConfigured, isLoadingConfig]);
+
+  // Auto-restart Mic for Continuous Voice Mode
+  useEffect(() => {
+    if (isVoiceMode && !talking && !isThinking && !isListening) {
+      const t = setTimeout(() => {
+        if (recognitionRef.current) {
+          recognitionRef.current.lang = languageCode;
+          try {
+            recognitionRef.current.start();
+            setIsListening(true);
+          } catch(e) {}
+        }
+      }, 500); // Small delay to prevent echo or overlap
+      return () => clearTimeout(t);
+    }
+  }, [isVoiceMode, talking, isThinking, isListening, languageCode]);
 
   const handleDicomAnalyzed = (metadata, dicomImageBase64) => {
     const prompt = `[SYSTEM AUTO-MESSAGE: The patient has uploaded a DICOM Medical Scan. Modality: ${metadata.Modality}, Body Part: ${metadata.BodyPartExamined}. Please act as a radiologist, analyze this image, and explain the findings to the patient in a simple, conversational way.]`;
